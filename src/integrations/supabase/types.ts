@@ -50,6 +50,39 @@ export type Database = {
         }
         Relationships: []
       }
+      configuracoes: {
+        Row: {
+          categoria: string
+          chave: string
+          created_at: string
+          descricao: string | null
+          id: string
+          updated_at: string
+          user_id: string
+          valor: string
+        }
+        Insert: {
+          categoria?: string
+          chave: string
+          created_at?: string
+          descricao?: string | null
+          id?: string
+          updated_at?: string
+          user_id: string
+          valor: string
+        }
+        Update: {
+          categoria?: string
+          chave?: string
+          created_at?: string
+          descricao?: string | null
+          id?: string
+          updated_at?: string
+          user_id?: string
+          valor?: string
+        }
+        Relationships: []
+      }
       movimentacoes: {
         Row: {
           colaborador_destino_id: string | null
