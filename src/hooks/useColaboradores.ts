@@ -108,6 +108,31 @@ export function useColaboradores() {
     },
   });
 
+  const importColaboradores = useMutation({
+    mutationFn: async (colaboradores: Array<{ chapa: string; nome: string; cargo: string; salario: number }>) => {
+      const toInsert = colaboradores.map((c) => ({
+        ...c,
+        user_id: user!.id,
+        ativo: true,
+      }));
+
+      const { data, error } = await supabase
+        .from('colaboradores')
+        .insert(toInsert)
+        .select();
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['colaboradores'] });
+      toast.success(`${data.length} colaboradores importados com sucesso!`);
+    },
+    onError: (error: Error) => {
+      toast.error(`Erro na importação: ${error.message}`);
+    },
+  });
+
   return {
     colaboradores: colaboradoresQuery.data ?? [],
     colaboradoresAtivos: (colaboradoresQuery.data ?? []).filter((c) => c.ativo),
@@ -116,5 +141,6 @@ export function useColaboradores() {
     createColaborador,
     updateColaborador,
     toggleColaboradorStatus,
+    importColaboradores,
   };
 }
