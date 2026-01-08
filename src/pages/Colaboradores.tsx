@@ -21,9 +21,10 @@ import {
 } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Plus, Search, Pencil, UserX, UserCheck, Loader2, Users } from 'lucide-react';
+import { Plus, Search, Pencil, UserX, UserCheck, Loader2, Users, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 import { z } from 'zod';
+import { ImportColaboradoresDialog, ValidatedRow } from '@/components/colaboradores/ImportColaboradoresDialog';
 
 const colaboradorSchema = z.object({
   chapa: z.string().trim().min(1, 'CHAPA é obrigatória').max(50, 'CHAPA muito longa'),
@@ -47,12 +48,19 @@ const initialFormData: ColaboradorFormData = {
 };
 
 export default function Colaboradores() {
-  const { colaboradores, isLoading, createColaborador, updateColaborador, toggleColaboradorStatus } = useColaboradores();
+  const { colaboradores, isLoading, createColaborador, updateColaborador, toggleColaboradorStatus, importColaboradores } = useColaboradores();
   const [search, setSearch] = useState('');
   const [showInactive, setShowInactive] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState<ColaboradorFormData>(initialFormData);
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
+
+  const existingChapas = colaboradores.map((c) => c.chapa);
+
+  const handleImport = async (rows: ValidatedRow[]) => {
+    await importColaboradores.mutateAsync(rows);
+  };
 
   const filteredColaboradores = colaboradores.filter((c) => {
     const matchesSearch =
@@ -138,13 +146,18 @@ export default function Colaboradores() {
           <h1 className="text-2xl font-bold text-foreground">Colaboradores</h1>
           <p className="text-muted-foreground">Gerencie o cadastro de colaboradores</p>
         </div>
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogTrigger asChild>
-            <Button onClick={() => handleOpenDialog()}>
-              <Plus className="h-4 w-4 mr-2" />
-              Novo Colaborador
-            </Button>
-          </DialogTrigger>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setImportDialogOpen(true)}>
+            <Upload className="h-4 w-4 mr-2" />
+            Importar
+          </Button>
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <DialogTrigger asChild>
+              <Button onClick={() => handleOpenDialog()}>
+                <Plus className="h-4 w-4 mr-2" />
+                Novo Colaborador
+              </Button>
+            </DialogTrigger>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>
@@ -215,8 +228,16 @@ export default function Colaboradores() {
                 </Button>
               </div>
             </form>
-          </DialogContent>
-        </Dialog>
+            </DialogContent>
+          </Dialog>
+        </div>
+
+        <ImportColaboradoresDialog
+          open={importDialogOpen}
+          onOpenChange={setImportDialogOpen}
+          existingChapas={existingChapas}
+          onImport={handleImport}
+        />
       </div>
 
       {/* Filters */}
