@@ -368,11 +368,13 @@ export function ImportColaboradoresDialog({
                         <SelectValue placeholder="Selecione a coluna" />
                       </SelectTrigger>
                       <SelectContent>
-                        {rawData.headers.map((header) => (
-                          <SelectItem key={header} value={header}>
-                            {header}
-                          </SelectItem>
-                        ))}
+                        {rawData.headers
+                          .filter((header) => header && header.trim() !== '')
+                          .map((header) => (
+                            <SelectItem key={header} value={header}>
+                              {header}
+                            </SelectItem>
+                          ))}
                       </SelectContent>
                     </Select>
                   </div>
