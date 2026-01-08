@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useColaboradores, Colaborador } from '@/hooks/useColaboradores';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { CurrencyInput } from '@/components/ui/currency-input';
 import { Label } from '@/components/ui/label';
 import {
   Table,
@@ -30,21 +31,21 @@ const colaboradorSchema = z.object({
   chapa: z.string().trim().min(1, 'CHAPA é obrigatória').max(50, 'CHAPA muito longa'),
   nome: z.string().trim().min(2, 'Nome deve ter no mínimo 2 caracteres').max(100, 'Nome muito longo'),
   cargo: z.string().trim().min(2, 'Cargo deve ter no mínimo 2 caracteres').max(100, 'Cargo muito longo'),
-  salario: z.number().positive('Salário deve ser maior que zero'),
+  salario: z.number().min(0.01, 'Salário deve ser maior que zero'),
 });
 
 interface ColaboradorFormData {
   chapa: string;
   nome: string;
   cargo: string;
-  salario: string;
+  salario: number | null;
 }
 
 const initialFormData: ColaboradorFormData = {
   chapa: '',
   nome: '',
   cargo: '',
-  salario: '',
+  salario: null,
 };
 
 export default function Colaboradores() {
@@ -77,7 +78,7 @@ export default function Colaboradores() {
         chapa: colaborador.chapa,
         nome: colaborador.nome,
         cargo: colaborador.cargo,
-        salario: colaborador.salario.toString(),
+        salario: colaborador.salario,
       });
     } else {
       setEditingId(null);
@@ -89,10 +90,9 @@ export default function Colaboradores() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    const salarioNum = parseFloat(formData.salario.replace(',', '.'));
     const result = colaboradorSchema.safeParse({
       ...formData,
-      salario: salarioNum,
+      salario: formData.salario ?? 0,
     });
 
     if (!result.success) {
@@ -106,14 +106,14 @@ export default function Colaboradores() {
         chapa: formData.chapa,
         nome: formData.nome,
         cargo: formData.cargo,
-        salario: salarioNum,
+        salario: formData.salario!,
       });
     } else {
       await createColaborador.mutateAsync({
         chapa: formData.chapa,
         nome: formData.nome,
         cargo: formData.cargo,
-        salario: salarioNum,
+        salario: formData.salario!,
         ativo: true,
       });
     }
@@ -182,12 +182,10 @@ export default function Colaboradores() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="salario">Salário *</Label>
-                  <Input
+                  <CurrencyInput
                     id="salario"
-                    type="text"
                     value={formData.salario}
-                    onChange={(e) => setFormData({ ...formData, salario: e.target.value })}
-                    placeholder="Ex: 5000.00"
+                    onChange={(value) => setFormData({ ...formData, salario: value })}
                   />
                 </div>
               </div>
