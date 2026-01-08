@@ -10,6 +10,7 @@ import Dashboard from "./pages/Dashboard";
 import Colaboradores from "./pages/Colaboradores";
 import Simulacoes from "./pages/Simulacoes";
 import SimulacaoEdit from "./pages/SimulacaoEdit";
+import RmConfig from "./pages/RmConfig";
 import NotFound from "./pages/NotFound";
 import { Loader2 } from "lucide-react";
 
@@ -66,6 +67,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <SimulacaoEdit />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/config/rm"
+        element={
+          <ProtectedRoute>
+            <RmConfig />
           </ProtectedRoute>
         }
       />

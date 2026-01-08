@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Link } from 'react-router-dom';
+import { formatCurrency } from '@/lib/currency';
 import {
   Users,
   FileBarChart,
@@ -59,13 +60,6 @@ export default function Dashboard() {
   }));
 
   const COLORS = ['hsl(var(--chart-1))', 'hsl(var(--chart-2))'];
-
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('pt-BR', {
-      style: 'currency',
-      currency: 'BRL',
-    }).format(value);
-  };
 
   if (isLoading) {
     return (

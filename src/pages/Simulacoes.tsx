@@ -48,6 +48,7 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
 import { z } from 'zod';
+import { formatCurrencyWithSign } from '@/lib/currency';
 
 const simulacaoSchema = z.object({
   nome: z.string().trim().min(3, 'Nome deve ter no mínimo 3 caracteres').max(100, 'Nome muito longo'),
@@ -90,17 +91,6 @@ export default function Simulacoes() {
       await deleteSimulacao.mutateAsync(deleteId);
       setDeleteId(null);
     }
-  };
-
-  const formatCurrency = (value: number) => {
-    const prefix = value >= 0 ? '+' : '';
-    return (
-      prefix +
-      new Intl.NumberFormat('pt-BR', {
-        style: 'currency',
-        currency: 'BRL',
-      }).format(value)
-    );
   };
 
   if (isLoading) {
@@ -212,7 +202,6 @@ export default function Simulacoes() {
             <SimulacaoCard
               key={simulacao.id}
               simulacao={simulacao}
-              formatCurrency={formatCurrency}
               onDuplicate={() => duplicateSimulacao.mutate(simulacao.id)}
               onDelete={() => setDeleteId(simulacao.id)}
             />
@@ -247,12 +236,11 @@ export default function Simulacoes() {
 
 interface SimulacaoCardProps {
   simulacao: SimulacaoWithStats;
-  formatCurrency: (value: number) => string;
   onDuplicate: () => void;
   onDelete: () => void;
 }
 
-function SimulacaoCard({ simulacao, formatCurrency, onDuplicate, onDelete }: SimulacaoCardProps) {
+function SimulacaoCard({ simulacao, onDuplicate, onDelete }: SimulacaoCardProps) {
   return (
     <Card className="group hover:shadow-md transition-shadow">
       <CardHeader className="pb-3">
@@ -314,7 +302,7 @@ function SimulacaoCard({ simulacao, formatCurrency, onDuplicate, onDelete }: Sim
             ) : (
               <TrendingDown className="h-4 w-4" />
             )}
-            {formatCurrency(simulacao.impactoTotal)}/mês
+            {formatCurrencyWithSign(simulacao.impactoTotal)}/mês
           </div>
         </div>
 

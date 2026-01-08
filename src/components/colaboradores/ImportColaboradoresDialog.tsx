@@ -41,6 +41,8 @@ import {
 import { parseCSV, parseBrazilianNumber, generateSampleCSV, ParsedRow } from '@/lib/csvParser';
 import * as XLSX from 'xlsx';
 import { z } from 'zod';
+import { toast } from 'sonner';
+import { useErrorHandler } from '@/hooks/useErrorHandler';
 
 interface ImportColaboradoresDialogProps {
   open: boolean;
@@ -80,6 +82,7 @@ export function ImportColaboradoresDialog({
   existingChapas,
   onImport,
 }: ImportColaboradoresDialogProps) {
+  const { handleError } = useErrorHandler();
   const [step, setStep] = useState<Step>('upload');
   const [rawData, setRawData] = useState<{ headers: string[]; rows: ParsedRow[] } | null>(null);
   const [columnMapping, setColumnMapping] = useState<ColumnMapping>({
@@ -164,7 +167,7 @@ export function ImportColaboradoresDialog({
       setColumnMapping(autoMapping);
       setStep('mapping');
     } catch (error) {
-      alert(error instanceof Error ? error.message : 'Erro ao processar arquivo');
+      handleError(error, 'Erro ao processar arquivo');
     }
   };
 
@@ -246,7 +249,7 @@ export function ImportColaboradoresDialog({
     });
 
     if (toImport.length === 0) {
-      alert('Nenhum registro válido para importar.');
+      toast.error('Nenhum registro válido para importar.');
       return;
     }
 
@@ -267,7 +270,7 @@ export function ImportColaboradoresDialog({
       setImportProgress(100);
       setStep('done');
     } catch (error) {
-      alert('Erro durante a importação. Tente novamente.');
+      handleError(error, 'Erro durante a importação. Tente novamente.');
       setStep('preview');
     }
   };

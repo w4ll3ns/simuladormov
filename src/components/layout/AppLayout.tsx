@@ -12,6 +12,7 @@ import {
   LogOut,
   ChevronLeft,
   ChevronRight,
+  Settings,
 } from 'lucide-react';
 
 interface AppLayoutProps {
@@ -22,6 +23,7 @@ const navItems = [
   { path: '/', label: 'Dashboard', icon: LayoutDashboard },
   { path: '/simulacoes', label: 'Simulações', icon: FileBarChart },
   { path: '/colaboradores', label: 'Colaboradores', icon: Users },
+  { path: '/config/rm', label: 'Configurações RM', icon: Settings },
 ];
 
 export default function AppLayout({ children }: AppLayoutProps) {

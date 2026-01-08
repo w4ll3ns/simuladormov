@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useColaboradores, Colaborador } from '@/hooks/useColaboradores';
+import { useRmColaboradores, RmColaborador } from '@/hooks/useRmColaboradores';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { CurrencyInput } from '@/components/ui/currency-input';
@@ -22,10 +23,14 @@ import {
 } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Plus, Search, Pencil, UserX, UserCheck, Loader2, Users, Upload } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Plus, Search, Pencil, UserX, UserCheck, Loader2, Users, Upload, Database, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { z } from 'zod';
 import { ImportColaboradoresDialog, ValidatedRow } from '@/components/colaboradores/ImportColaboradoresDialog';
+import { ChapaInput } from '@/components/colaboradores/ChapaInput';
+import { formatCurrency } from '@/lib/currency';
+import { useErrorHandler } from '@/hooks/useErrorHandler';
 
 const colaboradorSchema = z.object({
   chapa: z.string().trim().min(1, 'CHAPA é obrigatória').max(50, 'CHAPA muito longa'),
@@ -50,18 +55,17 @@ const initialFormData: ColaboradorFormData = {
 
 export default function Colaboradores() {
   const { colaboradores, isLoading, createColaborador, updateColaborador, toggleColaboradorStatus, importColaboradores } = useColaboradores();
+  const { colaboradoresRm, isLoading: isLoadingRm, error: errorRm, refetch: refetchRm } = useRmColaboradores();
+  const { handleError } = useErrorHandler();
   const [search, setSearch] = useState('');
   const [showInactive, setShowInactive] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState<ColaboradorFormData>(initialFormData);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [showRmResults, setShowRmResults] = useState(false);
 
   const existingChapas = colaboradores.map((c) => c.chapa);
-
-  const handleImport = async (rows: ValidatedRow[]) => {
-    await importColaboradores.mutateAsync(rows);
-  };
 
   const filteredColaboradores = colaboradores.filter((c) => {
     const matchesSearch =
@@ -87,8 +91,83 @@ export default function Colaboradores() {
     setDialogOpen(true);
   };
 
+  const handleImport = async (rows: ValidatedRow[]) => {
+    try {
+      await importColaboradores.mutateAsync(rows);
+    } catch (error) {
+      handleError(error);
+    }
+  };
+
+  const handleBuscarRm = async () => {
+    try {
+      await refetchRm();
+      setShowRmResults(true);
+      if (colaboradoresRm.length > 0) {
+        toast.success(`${colaboradoresRm.length} colaborador(es) encontrado(s) no RM`);
+      }
+    } catch (error) {
+      handleError(error);
+    }
+  };
+
+  const handleImportarDoRm = async () => {
+    if (!colaboradoresRm || colaboradoresRm.length === 0) {
+      toast.error('Nenhum colaborador do RM para importar');
+      return;
+    }
+
+    // Converte colaboradores do RM para o formato do sistema
+    const rowsToImport: ValidatedRow[] = colaboradoresRm
+      .filter((rm) => {
+        // Filtra apenas colaboradores que ainda não existem
+        const chapa = rm.CHAPA?.toString().trim() || '';
+        return chapa && !existingChapas.some((c) => c.trim().toUpperCase() === chapa.toUpperCase());
+      })
+      .map((rm) => ({
+        chapa: rm.CHAPA?.toString().trim() || '',
+        nome: rm.NOME?.toString().trim() || '',
+        cargo: rm.CARGO?.toString().trim() || '',
+        salario: typeof rm.SALARIO === 'number' ? rm.SALARIO : parseFloat(rm.SALARIO?.toString() || '0') || 0,
+      }))
+      .filter((row) => row.chapa && row.nome); // Remove linhas inválidas
+
+    if (rowsToImport.length === 0) {
+      toast.info('Todos os colaboradores do RM já estão cadastrados no sistema');
+      return;
+    }
+
+    try {
+      await importColaboradores.mutateAsync(rowsToImport);
+      setShowRmResults(false);
+    } catch (error) {
+      handleError(error);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Validação de CHAPA duplicada no frontend
+    if (editingId) {
+      const colaboradorAtual = colaboradores.find((c) => c.id === editingId);
+      const isDuplicate = colaboradorAtual?.chapa !== formData.chapa && 
+        existingChapas.some((chapa) => chapa.trim().toUpperCase() === formData.chapa.trim().toUpperCase());
+      
+      if (isDuplicate) {
+        toast.error('Já existe um colaborador com esta CHAPA');
+        return;
+      }
+    } else {
+      const isDuplicate = existingChapas.some(
+        (chapa) => chapa.trim().toUpperCase() === formData.chapa.trim().toUpperCase()
+      );
+      
+      if (isDuplicate) {
+        toast.error('Já existe um colaborador com esta CHAPA');
+        return;
+      }
+    }
 
     const result = colaboradorSchema.safeParse({
       ...formData,
@@ -96,38 +175,35 @@ export default function Colaboradores() {
     });
 
     if (!result.success) {
-      toast.error(result.error.errors[0].message);
+      handleError(result.error.errors[0], result.error.errors[0].message);
       return;
     }
 
-    if (editingId) {
-      await updateColaborador.mutateAsync({
-        id: editingId,
-        chapa: formData.chapa,
-        nome: formData.nome,
-        cargo: formData.cargo,
-        salario: formData.salario!,
-      });
-    } else {
-      await createColaborador.mutateAsync({
-        chapa: formData.chapa,
-        nome: formData.nome,
-        cargo: formData.cargo,
-        salario: formData.salario!,
-        ativo: true,
-      });
+    try {
+      if (editingId) {
+        await updateColaborador.mutateAsync({
+          id: editingId,
+          chapa: formData.chapa,
+          nome: formData.nome,
+          cargo: formData.cargo,
+          salario: formData.salario!,
+        });
+      } else {
+        await createColaborador.mutateAsync({
+          chapa: formData.chapa,
+          nome: formData.nome,
+          cargo: formData.cargo,
+          salario: formData.salario!,
+          ativo: true,
+        });
+      }
+
+      setDialogOpen(false);
+      setFormData(initialFormData);
+      setEditingId(null);
+    } catch (error) {
+      handleError(error);
     }
-
-    setDialogOpen(false);
-    setFormData(initialFormData);
-    setEditingId(null);
-  };
-
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('pt-BR', {
-      style: 'currency',
-      currency: 'BRL',
-    }).format(value);
   };
 
   if (isLoading) {
@@ -147,6 +223,18 @@ export default function Colaboradores() {
           <p className="text-muted-foreground">Gerencie o cadastro de colaboradores</p>
         </div>
         <div className="flex gap-2">
+          <Button 
+            variant="outline" 
+            onClick={handleBuscarRm}
+            disabled={isLoadingRm}
+          >
+            {isLoadingRm ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <Database className="h-4 w-4 mr-2" />
+            )}
+            Buscar do RM
+          </Button>
           <Button variant="outline" onClick={() => setImportDialogOpen(true)}>
             <Upload className="h-4 w-4 mr-2" />
             Importar
@@ -171,15 +259,12 @@ export default function Colaboradores() {
             </DialogHeader>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="chapa">CHAPA *</Label>
-                  <Input
-                    id="chapa"
-                    value={formData.chapa}
-                    onChange={(e) => setFormData({ ...formData, chapa: e.target.value })}
-                    placeholder="Ex: 12345"
-                  />
-                </div>
+                <ChapaInput
+                  value={formData.chapa}
+                  onChange={(value) => setFormData({ ...formData, chapa: value })}
+                  existingChapas={existingChapas}
+                  excludeChapa={editingId ? colaboradores.find((c) => c.id === editingId)?.chapa : undefined}
+                />
                 <div className="space-y-2">
                   <Label htmlFor="salario">Salário *</Label>
                   <CurrencyInput
@@ -237,6 +322,96 @@ export default function Colaboradores() {
           onImport={handleImport}
         />
       </div>
+
+      {/* Resultados do RM */}
+      {showRmResults && colaboradoresRm.length > 0 && (
+        <Card className="border-primary/50">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Database className="h-5 w-5" />
+              Colaboradores Encontrados no RM
+              <Badge variant="secondary" className="ml-2">
+                {colaboradoresRm.length}
+              </Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Alert>
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                {colaboradoresRm.filter((rm) => {
+                  const chapa = rm.CHAPA?.toString().trim() || '';
+                  return chapa && !existingChapas.some((c) => c.trim().toUpperCase() === chapa.toUpperCase());
+                }).length} colaborador(es) podem ser importados. Os demais já estão cadastrados.
+              </AlertDescription>
+            </Alert>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>CHAPA</TableHead>
+                    <TableHead>Nome</TableHead>
+                    <TableHead>Cargo</TableHead>
+                    <TableHead className="text-right">Salário</TableHead>
+                    <TableHead>Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {colaboradoresRm.map((rm, index) => {
+                    const chapa = rm.CHAPA?.toString().trim() || '';
+                    const jaExiste = existingChapas.some((c) => c.trim().toUpperCase() === chapa.toUpperCase());
+                    return (
+                      <TableRow key={index} className={jaExiste ? 'opacity-60' : ''}>
+                        <TableCell className="font-mono">{chapa || '-'}</TableCell>
+                        <TableCell className="font-medium">{rm.NOME?.toString() || '-'}</TableCell>
+                        <TableCell>{rm.CARGO?.toString() || '-'}</TableCell>
+                        <TableCell className="text-right">
+                          {rm.SALARIO ? formatCurrency(typeof rm.SALARIO === 'number' ? rm.SALARIO : parseFloat(rm.SALARIO.toString() || '0')) : '-'}
+                        </TableCell>
+                        <TableCell>
+                          {jaExiste ? (
+                            <Badge variant="secondary">Já cadastrado</Badge>
+                          ) : (
+                            <Badge variant="default">
+                              <CheckCircle2 className="h-3 w-3 mr-1" />
+                              Disponível
+                            </Badge>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setShowRmResults(false)}>
+                Fechar
+              </Button>
+              <Button 
+                onClick={handleImportarDoRm}
+                disabled={importColaboradores.isPending || colaboradoresRm.filter((rm) => {
+                  const chapa = rm.CHAPA?.toString().trim() || '';
+                  return chapa && !existingChapas.some((c) => c.trim().toUpperCase() === chapa.toUpperCase());
+                }).length === 0}
+              >
+                {importColaboradores.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                <Upload className="h-4 w-4 mr-2" />
+                Importar do RM
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {showRmResults && errorRm && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            Erro ao buscar colaboradores do RM: {errorRm instanceof Error ? errorRm.message : 'Erro desconhecido'}
+          </AlertDescription>
+        </Alert>
+      )}
 
       {/* Filters */}
       <Card>

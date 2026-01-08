@@ -56,8 +56,13 @@ export function useColaboradores() {
       queryClient.invalidateQueries({ queryKey: ['colaboradores'] });
       toast.success('Colaborador cadastrado com sucesso!');
     },
-    onError: (error: Error) => {
-      toast.error(error.message);
+    onError: (error: unknown) => {
+      const errorMessage = error instanceof Error ? error.message : 'Erro ao cadastrar colaborador';
+      if (errorMessage.includes('23505') || errorMessage.includes('CHAPA')) {
+        toast.error('Já existe um colaborador com esta CHAPA');
+      } else {
+        toast.error(errorMessage);
+      }
     },
   });
 
@@ -82,8 +87,13 @@ export function useColaboradores() {
       queryClient.invalidateQueries({ queryKey: ['colaboradores'] });
       toast.success('Colaborador atualizado com sucesso!');
     },
-    onError: (error: Error) => {
-      toast.error(error.message);
+    onError: (error: unknown) => {
+      const errorMessage = error instanceof Error ? error.message : 'Erro ao atualizar colaborador';
+      if (errorMessage.includes('23505') || errorMessage.includes('CHAPA')) {
+        toast.error('Já existe um colaborador com esta CHAPA');
+      } else {
+        toast.error(errorMessage);
+      }
     },
   });
 
@@ -128,8 +138,9 @@ export function useColaboradores() {
       queryClient.invalidateQueries({ queryKey: ['colaboradores'] });
       toast.success(`${data.length} colaboradores importados com sucesso!`);
     },
-    onError: (error: Error) => {
-      toast.error(`Erro na importação: ${error.message}`);
+    onError: (error: unknown) => {
+      const errorMessage = error instanceof Error ? error.message : 'Erro na importação';
+      toast.error(`Erro na importação: ${errorMessage}`);
     },
   });
 

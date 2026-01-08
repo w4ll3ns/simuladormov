@@ -41,6 +41,10 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import SimulacaoResumo from '@/components/simulacao/SimulacaoResumo';
 import { Database, Json } from '@/integrations/supabase/types';
+import { formatCurrency } from '@/lib/currency';
+import { useErrorHandler } from '@/hooks/useErrorHandler';
+import { ChainStepCard } from '@/components/simulacao/ChainStepCard';
+import { SalaryComparison } from '@/components/simulacao/SalaryComparison';
 
 type TipoEvento = Database['public']['Enums']['tipo_evento'];
 type TipoMovimentacao = Database['public']['Enums']['tipo_movimentacao'];
@@ -74,6 +78,7 @@ export default function SimulacaoEdit() {
   const { colaboradoresAtivos } = useColaboradores();
   const { updateSimulacao } = useSimulacoes();
   const { addMovimentacao, clearMovimentacoes } = useMovimentacoes(id);
+  const { handleError } = useErrorHandler();
 
   // Wizard state
   const [step, setStep] = useState(1);
@@ -176,13 +181,6 @@ export default function SimulacaoEdit() {
   }, [colaboradoresAtivos, chainSteps, colaboradorSaidaId]);
 
   const currentVaga = pendingVagas[currentVagaIndex];
-
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('pt-BR', {
-      style: 'currency',
-      currency: 'BRL',
-    }).format(value);
-  };
 
   const handleStep1Next = () => {
     if (!nome.trim()) {
@@ -402,8 +400,8 @@ export default function SimulacaoEdit() {
 
       toast.success('Simulação salva com sucesso!');
       setStep(4);
-    } catch {
-      toast.error('Erro ao salvar simulação');
+    } catch (error) {
+      handleError(error, 'Erro ao salvar simulação');
     }
   };
 
@@ -641,7 +639,7 @@ export default function SimulacaoEdit() {
                       )}
                     </div>
                     <div className="flex-1 pb-4">
-                      <ChainStepCard step={step} formatCurrency={formatCurrency} />
+                      <ChainStepCard step={step} />
                     </div>
                   </div>
                 ))}
@@ -789,7 +787,6 @@ export default function SimulacaoEdit() {
                       <SalaryComparison
                         salarioAnterior={colaboradorDestino.salario}
                         novoSalario={parseFloat(novoSalario.replace(',', '.')) || 0}
-                        formatCurrency={formatCurrency}
                       />
                     )}
 
@@ -882,135 +879,3 @@ export default function SimulacaoEdit() {
   );
 }
 
-function ChainStepCard({
-  step,
-  formatCurrency,
-}: {
-  step: {
-    tipo: TipoEvento;
-    colaboradorOrigem?: Colaborador;
-    colaboradorDestino?: Colaborador;
-    novaFuncao?: string;
-    novoSalario?: number;
-    funcaoNovaVaga?: string;
-    salarioNovaVaga?: number;
-    tipoMovimentacao?: TipoMovimentacao;
-    motivoSaida?: MotivoSaida;
-  };
-  formatCurrency: (v: number) => string;
-}) {
-  if (step.tipo === 'saida_inicial' && step.colaboradorOrigem) {
-    return (
-      <Card>
-        <CardContent className="pt-4">
-          <div className="flex items-center gap-2 mb-2">
-            <Badge variant="destructive">Saída</Badge>
-            <span className="text-sm text-muted-foreground">
-              {MOTIVOS_SAIDA.find((m) => m.value === step.motivoSaida)?.label}
-            </span>
-          </div>
-          <p className="font-medium">{step.colaboradorOrigem.nome}</p>
-          <p className="text-sm text-muted-foreground">
-            {step.colaboradorOrigem.cargo} • {formatCurrency(step.colaboradorOrigem.salario)}
-          </p>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  if (step.tipo === 'substituicao_interna' && step.colaboradorDestino) {
-    const diff = (step.novoSalario || 0) - step.colaboradorDestino.salario;
-    return (
-      <Card>
-        <CardContent className="pt-4">
-          <div className="flex items-center gap-2 mb-2">
-            <Badge>Substituição</Badge>
-            <Badge variant="secondary">
-              {TIPOS_MOVIMENTACAO.find((t) => t.value === step.tipoMovimentacao)?.label}
-            </Badge>
-          </div>
-          <p className="font-medium">{step.colaboradorDestino.nome}</p>
-          <p className="text-sm text-muted-foreground mb-2">
-            {step.colaboradorDestino.cargo} → {step.novaFuncao}
-          </p>
-          <div className="flex items-center gap-2 text-sm">
-            <span>{formatCurrency(step.colaboradorDestino.salario)}</span>
-            <ArrowRight className="h-4 w-4" />
-            <span className="font-medium">{formatCurrency(step.novoSalario || 0)}</span>
-            <span className={diff >= 0 ? 'text-success' : 'text-destructive'}>
-              ({diff >= 0 ? '+' : ''}{formatCurrency(diff)})
-            </span>
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  if (step.tipo === 'nova_contratacao') {
-    return (
-      <Card>
-        <CardContent className="pt-4">
-          <Badge className="bg-success hover:bg-success/90 mb-2">Nova Contratação</Badge>
-          <p className="font-medium">{step.funcaoNovaVaga}</p>
-          <p className="text-sm text-muted-foreground">
-            Salário proposto: {formatCurrency(step.salarioNovaVaga || 0)}
-          </p>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  if (step.tipo === 'fim_sem_reposicao' && step.colaboradorOrigem) {
-    return (
-      <Card>
-        <CardContent className="pt-4">
-          <Badge variant="secondary" className="mb-2">Vaga Extinta</Badge>
-          <p className="font-medium">{step.colaboradorOrigem.cargo}</p>
-          <p className="text-sm text-muted-foreground">
-            Economia: {formatCurrency(step.colaboradorOrigem.salario)}/mês
-          </p>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  return null;
-}
-
-function SalaryComparison({
-  salarioAnterior,
-  novoSalario,
-  formatCurrency,
-}: {
-  salarioAnterior: number;
-  novoSalario: number;
-  formatCurrency: (v: number) => string;
-}) {
-  const diff = novoSalario - salarioAnterior;
-  const percentual = salarioAnterior > 0 ? ((novoSalario / salarioAnterior) - 1) * 100 : 0;
-  const isPositive = diff >= 0;
-
-  return (
-    <div className={cn(
-      'p-3 rounded-lg flex items-center justify-between',
-      isPositive ? 'bg-success/10' : 'bg-destructive/10'
-    )}>
-      <div className="flex items-center gap-2">
-        {isPositive ? (
-          <TrendingUp className="h-4 w-4 text-success" />
-        ) : (
-          <TrendingDown className="h-4 w-4 text-destructive" />
-        )}
-        <span className="text-sm">Diferença salarial:</span>
-      </div>
-      <div className="text-right">
-        <p className={cn('font-medium', isPositive ? 'text-success' : 'text-destructive')}>
-          {isPositive ? '+' : ''}{formatCurrency(diff)}
-        </p>
-        <p className="text-xs text-muted-foreground">
-          {isPositive ? '+' : ''}{percentual.toFixed(1)}%
-        </p>
-      </div>
-    </div>
-  );
-}

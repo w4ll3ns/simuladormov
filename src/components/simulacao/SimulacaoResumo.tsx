@@ -34,6 +34,7 @@ import {
 import { Simulacao } from '@/hooks/useSimulacoes';
 import { Colaborador } from '@/hooks/useColaboradores';
 import { Database } from '@/integrations/supabase/types';
+import { formatCurrency, formatCurrencyWithSign } from '@/lib/currency';
 
 type TipoEvento = Database['public']['Enums']['tipo_evento'];
 type TipoMovimentacao = Database['public']['Enums']['tipo_movimentacao'];
@@ -65,12 +66,6 @@ export default function SimulacaoResumo({
   onEdit,
   onFinalize,
 }: SimulacaoResumoProps) {
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('pt-BR', {
-      style: 'currency',
-      currency: 'BRL',
-    }).format(value);
-  };
 
   // Calculate summary data
   const summaryData = useMemo(() => {
@@ -262,7 +257,7 @@ export default function SimulacaoResumo({
           </CardHeader>
           <CardContent>
             <div className={`text-2xl font-bold ${summaryData.impactoTotal >= 0 ? 'text-success' : 'text-destructive'}`}>
-              {summaryData.impactoTotal >= 0 ? '+' : ''}{formatCurrency(summaryData.impactoTotal)}
+              {formatCurrencyWithSign(summaryData.impactoTotal)}
             </div>
             <p className="text-xs text-muted-foreground">
               {summaryData.impactoPercentual >= 0 ? '+' : ''}{summaryData.impactoPercentual.toFixed(1)}% por mês
@@ -377,7 +372,7 @@ export default function SimulacaoResumo({
                     <TableCell className="text-right">{formatCurrency(c.salarioNovo)}</TableCell>
                     <TableCell className="text-right">
                       <div className={c.diferenca >= 0 ? 'text-success' : 'text-destructive'}>
-                        {c.diferenca >= 0 ? '+' : ''}{formatCurrency(c.diferenca)}
+                        {formatCurrencyWithSign(c.diferenca)}
                         <span className="block text-xs">
                           ({c.percentual >= 0 ? '+' : ''}{c.percentual.toFixed(1)}%)
                         </span>
