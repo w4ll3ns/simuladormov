@@ -22,10 +22,14 @@ import {
 } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Plus, Search, Pencil, UserX, UserCheck, Loader2, Users, Upload } from 'lucide-react';
+import { Plus, Search, Pencil, UserX, UserCheck, Loader2, Users, Upload, Settings, Database, Cloud } from 'lucide-react';
 import { toast } from 'sonner';
 import { z } from 'zod';
 import { ImportColaboradoresDialog, ValidatedRow } from '@/components/colaboradores/ImportColaboradoresDialog';
+import { TotvsConfigDialog } from '@/components/totvs/TotvsConfigDialog';
+import { SyncTotvsButton } from '@/components/colaboradores/SyncTotvsButton';
+import { Switch } from '@/components/ui/switch';
+import type { FonteDados } from '@/hooks/useColaboradores';
 
 const colaboradorSchema = z.object({
   chapa: z.string().trim().min(1, 'CHAPA é obrigatória').max(50, 'CHAPA muito longa'),
@@ -49,13 +53,15 @@ const initialFormData: ColaboradorFormData = {
 };
 
 export default function Colaboradores() {
-  const { colaboradores, isLoading, createColaborador, updateColaborador, toggleColaboradorStatus, importColaboradores } = useColaboradores();
+  const [fonteDados, setFonteDados] = useState<FonteDados>('totvs');
+  const { colaboradores, isLoading, createColaborador, updateColaborador, toggleColaboradorStatus, importColaboradores } = useColaboradores(fonteDados);
   const [search, setSearch] = useState('');
   const [showInactive, setShowInactive] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState<ColaboradorFormData>(initialFormData);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [configDialogOpen, setConfigDialogOpen] = useState(false);
 
   const existingChapas = colaboradores.map((c) => c.chapa);
 
@@ -147,13 +153,39 @@ export default function Colaboradores() {
           <p className="text-muted-foreground">Gerencie o cadastro de colaboradores</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={() => setImportDialogOpen(true)}>
+          {/* Toggle de Fonte de Dados */}
+          <div className="flex items-center gap-2 px-3 py-2 border rounded-md">
+            <Database className="h-4 w-4 text-muted-foreground" />
+            <span className="text-sm text-muted-foreground">Supabase</span>
+            <Switch
+              checked={fonteDados === 'totvs'}
+              onCheckedChange={(checked) => setFonteDados(checked ? 'totvs' : 'supabase')}
+            />
+            <Cloud className="h-4 w-4 text-muted-foreground" />
+            <span className="text-sm text-muted-foreground">TOTVS</span>
+            <Badge variant="secondary" className="ml-2">
+              {fonteDados === 'totvs' ? 'TOTVS' : 'Supabase'}
+            </Badge>
+          </div>
+          
+          {/* Botão de Configuração TOTVS */}
+          {fonteDados === 'totvs' && (
+            <Button variant="outline" onClick={() => setConfigDialogOpen(true)}>
+              <Settings className="h-4 w-4 mr-2" />
+              Configurar TOTVS
+            </Button>
+          )}
+          
+          {/* Botão de Sincronização (apenas no modo Supabase) */}
+          {fonteDados === 'supabase' && <SyncTotvsButton />}
+          
+          <Button variant="outline" onClick={() => setImportDialogOpen(true)} disabled={fonteDados === 'totvs'}>
             <Upload className="h-4 w-4 mr-2" />
             Importar
           </Button>
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
-              <Button onClick={() => handleOpenDialog()}>
+              <Button onClick={() => handleOpenDialog()} disabled={fonteDados === 'totvs'}>
                 <Plus className="h-4 w-4 mr-2" />
                 Novo Colaborador
               </Button>
@@ -236,6 +268,11 @@ export default function Colaboradores() {
           existingChapas={existingChapas}
           onImport={handleImport}
         />
+        
+        <TotvsConfigDialog
+          open={configDialogOpen}
+          onOpenChange={setConfigDialogOpen}
+        />
       </div>
 
       {/* Filters */}
@@ -269,6 +306,19 @@ export default function Colaboradores() {
             Lista de Colaboradores
             <Badge variant="secondary" className="ml-2">
               {filteredColaboradores.length}
+            </Badge>
+            <Badge variant={fonteDados === 'totvs' ? 'default' : 'outline'} className="ml-2">
+              {fonteDados === 'totvs' ? (
+                <>
+                  <Cloud className="h-3 w-3 mr-1" />
+                  TOTVS Direto
+                </>
+              ) : (
+                <>
+                  <Database className="h-3 w-3 mr-1" />
+                  Supabase
+                </>
+              )}
             </Badge>
           </CardTitle>
         </CardHeader>
@@ -316,29 +366,38 @@ export default function Colaboradores() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleOpenDialog(colaborador)}
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() =>
-                              toggleColaboradorStatus.mutate({
-                                id: colaborador.id,
-                                ativo: !colaborador.ativo,
-                              })
-                            }
-                          >
-                            {colaborador.ativo ? (
-                              <UserX className="h-4 w-4" />
-                            ) : (
-                              <UserCheck className="h-4 w-4" />
-                            )}
-                          </Button>
+                          {fonteDados === 'supabase' && (
+                            <>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleOpenDialog(colaborador)}
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() =>
+                                  toggleColaboradorStatus.mutate({
+                                    id: colaborador.id,
+                                    ativo: !colaborador.ativo,
+                                  })
+                                }
+                              >
+                                {colaborador.ativo ? (
+                                  <UserX className="h-4 w-4" />
+                                ) : (
+                                  <UserCheck className="h-4 w-4" />
+                                )}
+                              </Button>
+                            </>
+                          )}
+                          {fonteDados === 'totvs' && (
+                            <span className="text-xs text-muted-foreground">
+                              Somente leitura
+                            </span>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>

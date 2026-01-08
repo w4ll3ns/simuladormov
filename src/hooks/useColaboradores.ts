@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import { useColaboradoresTotvs, fetchColaboradoresFromTotvs } from './useColaboradoresTotvs';
 
 export interface Colaborador {
   id: string;
@@ -18,11 +19,17 @@ export interface Colaborador {
 export type ColaboradorInsert = Omit<Colaborador, 'id' | 'created_at' | 'updated_at'>;
 export type ColaboradorUpdate = Partial<Omit<Colaborador, 'id' | 'user_id' | 'created_at' | 'updated_at'>>;
 
-export function useColaboradores() {
+export type FonteDados = 'supabase' | 'totvs';
+
+export function useColaboradores(fonteDados: FonteDados = 'totvs') {
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
-  const colaboradoresQuery = useQuery({
+  // Hook para buscar do TOTVS
+  const totvsQuery = useColaboradoresTotvs(fonteDados === 'totvs');
+
+  // Query para buscar do Supabase
+  const supabaseQuery = useQuery({
     queryKey: ['colaboradores', user?.id],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -33,8 +40,11 @@ export function useColaboradores() {
       if (error) throw error;
       return data as Colaborador[];
     },
-    enabled: !!user,
+    enabled: !!user && fonteDados === 'supabase',
   });
+
+  // Determinar qual query usar baseado na fonte de dados
+  const colaboradoresQuery = fonteDados === 'totvs' ? totvsQuery : supabaseQuery;
 
   const createColaborador = useMutation({
     mutationFn: async (colaborador: Omit<ColaboradorInsert, 'user_id'>) => {
@@ -133,14 +143,112 @@ export function useColaboradores() {
     },
   });
 
+  // Função de sincronização TOTVS → Supabase
+  const syncFromTotvs = useMutation({
+    mutationFn: async (options?: { replace?: boolean }) => {
+      if (!user) {
+        throw new Error('Usuário não autenticado');
+      }
+
+      // Buscar colaboradores do TOTVS
+      const colaboradoresTotvs = await fetchColaboradoresFromTotvs(user.id);
+
+      if (colaboradoresTotvs.length === 0) {
+        throw new Error('Nenhum colaborador encontrado no TOTVS');
+      }
+
+      // Preparar dados para inserção
+      const toInsert = colaboradoresTotvs.map((c) => ({
+        ...c,
+        user_id: user.id,
+      }));
+
+      if (options?.replace) {
+        // Substituir todos os colaboradores existentes
+        // Primeiro, desativar todos os existentes
+        await supabase
+          .from('colaboradores')
+          .update({ ativo: false })
+          .eq('user_id', user.id);
+
+        // Depois, inserir os novos (ou atualizar se já existirem)
+        const { data, error } = await supabase
+          .from('colaboradores')
+          .upsert(toInsert, {
+            onConflict: 'user_id,chapa',
+            ignoreDuplicates: false,
+          })
+          .select();
+
+        if (error) throw error;
+        return data;
+      } else {
+        // Apenas inserir novos (ignorar duplicados)
+        const { data, error } = await supabase
+          .from('colaboradores')
+          .insert(toInsert)
+          .select();
+
+        if (error) {
+          // Se houver erro de duplicata, tentar atualizar
+          if (error.code === '23505') {
+            // Atualizar colaboradores existentes
+            const updates = await Promise.all(
+              colaboradoresTotvs.map(async (c) => {
+                const { data: updated, error: updateError } = await supabase
+                  .from('colaboradores')
+                  .update({
+                    nome: c.nome,
+                    cargo: c.cargo,
+                    salario: c.salario,
+                    ativo: true,
+                  })
+                  .eq('user_id', user.id)
+                  .eq('chapa', c.chapa)
+                  .select()
+                  .single();
+
+                if (updateError) throw updateError;
+                return updated;
+              })
+            );
+            return updates;
+          }
+          throw error;
+        }
+        return data;
+      }
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['colaboradores'] });
+      toast.success(`${data.length} colaboradores sincronizados com sucesso!`);
+    },
+    onError: (error: Error) => {
+      toast.error(`Erro na sincronização: ${error.message}`);
+    },
+  });
+
+  // Converter dados do TOTVS para formato Colaborador (se necessário)
+  const colaboradoresData = fonteDados === 'totvs' 
+    ? (colaboradoresQuery.data?.map((c, index) => ({
+        id: `totvs-${index}`,
+        user_id: user?.id || '',
+        ...c,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })) as Colaborador[] | undefined) ?? []
+    : (colaboradoresQuery.data as Colaborador[] | undefined) ?? [];
+
   return {
-    colaboradores: colaboradoresQuery.data ?? [],
-    colaboradoresAtivos: (colaboradoresQuery.data ?? []).filter((c) => c.ativo),
+    colaboradores: colaboradoresData,
+    colaboradoresAtivos: colaboradoresData.filter((c) => c.ativo),
     isLoading: colaboradoresQuery.isLoading,
     error: colaboradoresQuery.error,
+    fonteDados,
     createColaborador,
     updateColaborador,
     toggleColaboradorStatus,
     importColaboradores,
+    syncFromTotvs,
   };
 }
