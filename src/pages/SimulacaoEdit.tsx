@@ -184,6 +184,37 @@ export default function SimulacaoEdit() {
     }).format(value);
   };
 
+  // Calcular totais de salário antes e depois das movimentações
+  const salarioTotais = useMemo(() => {
+    let totalAntes = 0;
+    let totalDepois = 0;
+
+    chainSteps.forEach((step) => {
+      if (step.tipo === 'saida_inicial' && step.colaboradorOrigem) {
+        totalAntes += step.colaboradorOrigem.salario;
+        // Saída: não adiciona ao total depois
+      }
+
+      if (step.tipo === 'substituicao_interna' && step.colaboradorDestino) {
+        const salarioAnterior = step.colaboradorDestino.salario;
+        const salarioNovo = step.novoSalario || 0;
+        totalAntes += salarioAnterior;
+        totalDepois += salarioNovo;
+      }
+
+      if (step.tipo === 'nova_contratacao') {
+        const salario = step.salarioNovaVaga || 0;
+        totalDepois += salario;
+      }
+
+      if (step.tipo === 'fim_sem_reposicao' && step.colaboradorOrigem) {
+        // Vaga extinta: não adiciona ao total depois (economia)
+      }
+    });
+
+    return { totalAntes, totalDepois };
+  }, [chainSteps]);
+
   const handleStep1Next = () => {
     if (!nome.trim()) {
       toast.error('Informe o nome da simulação');
@@ -638,6 +669,57 @@ export default function SimulacaoEdit() {
       {/* Step 3: Chain of Substitutions */}
       {step === 3 && (
         <div className="space-y-6">
+          {/* Totals Summary */}
+          {chainSteps.length > 0 && (
+            <div className="grid gap-4 md:grid-cols-3">
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">
+                    Total Pago de Salário (Antes)
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{formatCurrency(salarioTotais.totalAntes)}</div>
+                  <p className="text-xs text-muted-foreground">valor mensal antes das movimentações</p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">
+                    Total Após Movimentação
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{formatCurrency(salarioTotais.totalDepois)}</div>
+                  <p className="text-xs text-muted-foreground">valor mensal após as movimentações</p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                    Impacto Total
+                    {salarioTotais.totalDepois - salarioTotais.totalAntes >= 0 ? (
+                      <TrendingUp className="h-4 w-4 text-success" />
+                    ) : (
+                      <TrendingDown className="h-4 w-4 text-destructive" />
+                    )}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className={`text-2xl font-bold ${salarioTotais.totalDepois - salarioTotais.totalAntes >= 0 ? 'text-success' : 'text-destructive'}`}>
+                    {salarioTotais.totalDepois - salarioTotais.totalAntes >= 0 ? '+' : ''}
+                    {formatCurrency(salarioTotais.totalDepois - salarioTotais.totalAntes)}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    diferença entre antes e depois
+                  </p>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
           {/* Chain Visualization */}
           <Card>
             <CardHeader>
