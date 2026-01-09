@@ -348,6 +348,22 @@ export default function SimulacaoEdit() {
     setObservacoes('');
   };
 
+  // Função auxiliar para validar se um ID é um UUID válido
+  const isValidUUID = (id: string | null | undefined): boolean => {
+    if (!id) return false;
+    // UUID v4 regex pattern
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    return uuidRegex.test(id);
+  };
+
+  // Função auxiliar para obter o ID do colaborador (retorna null se não for UUID válido)
+  const getColaboradorId = (colaborador?: Colaborador): string | null => {
+    if (!colaborador?.id) return null;
+    // Se o ID não é um UUID válido (ex: "totvs-1"), retorna null
+    // O snapshot contém todos os dados necessários
+    return isValidUUID(colaborador.id) ? colaborador.id : null;
+  };
+
   const handleSaveSimulacao = async () => {
     if (!id) return;
 
@@ -382,28 +398,44 @@ export default function SimulacaoEdit() {
           salario: step.colaboradorDestino.salario,
         } : null;
 
-        await addMovimentacao.mutateAsync({
-          simulacao_id: id,
-          ordem: i + 1,
-          tipo_evento: step.tipo,
-          colaborador_origem_id: step.colaboradorOrigem?.id || null,
-          colaborador_origem_snapshot: origemSnapshot,
-          colaborador_destino_id: step.colaboradorDestino?.id || null,
-          colaborador_destino_snapshot: destinoSnapshot,
-          nova_funcao: step.novaFuncao || null,
-          novo_salario: step.novoSalario || null,
-          tipo_movimentacao: step.tipoMovimentacao || null,
-          funcao_nova_vaga: step.funcaoNovaVaga || null,
-          salario_nova_vaga: step.salarioNovaVaga || null,
-          motivo_saida: step.motivoSaida || null,
-          observacoes: step.observacoes || null,
-        });
+        // Validar campos obrigatórios antes de inserir
+        if (!step.tipo) {
+          throw new Error(`Tipo de evento não definido para o passo ${i + 1}`);
+        }
+
+        // Obter IDs válidos (apenas UUIDs do banco de dados)
+        const colaboradorOrigemId = getColaboradorId(step.colaboradorOrigem);
+        const colaboradorDestinoId = getColaboradorId(step.colaboradorDestino);
+
+        try {
+          await addMovimentacao.mutateAsync({
+            simulacao_id: id,
+            ordem: i + 1,
+            tipo_evento: step.tipo,
+            colaborador_origem_id: colaboradorOrigemId,
+            colaborador_origem_snapshot: origemSnapshot,
+            colaborador_destino_id: colaboradorDestinoId,
+            colaborador_destino_snapshot: destinoSnapshot,
+            nova_funcao: step.novaFuncao || null,
+            novo_salario: step.novoSalario !== undefined ? step.novoSalario : null,
+            tipo_movimentacao: step.tipoMovimentacao || null,
+            funcao_nova_vaga: step.funcaoNovaVaga || null,
+            salario_nova_vaga: step.salarioNovaVaga !== undefined ? step.salarioNovaVaga : null,
+            motivo_saida: step.motivoSaida || null,
+            observacoes: step.observacoes || null,
+          });
+        } catch (error: any) {
+          console.error(`Erro ao inserir movimentação na posição ${i + 1}:`, error);
+          throw new Error(`Erro ao salvar passo ${i + 1}: ${error?.message || 'Erro desconhecido'}`);
+        }
       }
 
       toast.success('Simulação salva com sucesso!');
       setStep(4);
-    } catch {
-      toast.error('Erro ao salvar simulação');
+    } catch (error: any) {
+      console.error('Erro ao salvar simulação:', error);
+      const errorMessage = error?.message || 'Erro ao salvar simulação';
+      toast.error(errorMessage);
     }
   };
 

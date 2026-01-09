@@ -179,28 +179,37 @@ export function useSimulacoes() {
 
       // Copy movements
       if (original.movimentacoes && original.movimentacoes.length > 0) {
-        const newMovs = original.movimentacoes.map((mov) => ({
+        const newMovs: Database['public']['Tables']['movimentacoes']['Insert'][] = original.movimentacoes.map((mov) => ({
           simulacao_id: newSim.id,
           ordem: mov.ordem,
           tipo_evento: mov.tipo_evento,
-          colaborador_origem_id: mov.colaborador_origem_id,
-          colaborador_origem_snapshot: mov.colaborador_origem_snapshot,
-          colaborador_destino_id: mov.colaborador_destino_id,
-          colaborador_destino_snapshot: mov.colaborador_destino_snapshot,
-          nova_funcao: mov.nova_funcao,
-          novo_salario: mov.novo_salario,
-          tipo_movimentacao: mov.tipo_movimentacao,
-          funcao_nova_vaga: mov.funcao_nova_vaga,
-          salario_nova_vaga: mov.salario_nova_vaga,
-          motivo_saida: mov.motivo_saida,
-          observacoes: mov.observacoes,
+          colaborador_origem_id: mov.colaborador_origem_id || null,
+          colaborador_origem_snapshot: mov.colaborador_origem_snapshot || null,
+          colaborador_destino_id: mov.colaborador_destino_id || null,
+          colaborador_destino_snapshot: mov.colaborador_destino_snapshot || null,
+          nova_funcao: mov.nova_funcao || null,
+          novo_salario: mov.novo_salario !== null && mov.novo_salario !== undefined 
+            ? Number(mov.novo_salario) 
+            : null,
+          tipo_movimentacao: mov.tipo_movimentacao || null,
+          funcao_nova_vaga: mov.funcao_nova_vaga || null,
+          salario_nova_vaga: mov.salario_nova_vaga !== null && mov.salario_nova_vaga !== undefined 
+            ? Number(mov.salario_nova_vaga) 
+            : null,
+          motivo_saida: mov.motivo_saida || null,
+          observacoes: mov.observacoes || null,
         }));
 
         const { error: movsError } = await supabase
           .from('movimentacoes')
-          .insert(newMovs);
+          .insert(newMovs)
+          .select();
 
-        if (movsError) throw movsError;
+        if (movsError) {
+          console.error('Erro ao duplicar movimentações:', movsError);
+          console.error('Dados enviados:', JSON.stringify(newMovs, null, 2));
+          throw movsError;
+        }
       }
 
       return newSim;
@@ -260,21 +269,50 @@ export function useMovimentacoes(simulacaoId: string | undefined) {
 
   const addMovimentacao = useMutation({
     mutationFn: async (data: Omit<Movimentacao, 'id' | 'created_at' | 'updated_at'>) => {
+      // Preparar dados para inserção, garantindo tipos corretos
+      const insertData: Database['public']['Tables']['movimentacoes']['Insert'] = {
+        simulacao_id: data.simulacao_id,
+        ordem: data.ordem,
+        tipo_evento: data.tipo_evento,
+        colaborador_origem_id: data.colaborador_origem_id || null,
+        colaborador_origem_snapshot: data.colaborador_origem_snapshot || null,
+        colaborador_destino_id: data.colaborador_destino_id || null,
+        colaborador_destino_snapshot: data.colaborador_destino_snapshot || null,
+        nova_funcao: data.nova_funcao || null,
+        novo_salario: data.novo_salario !== null && data.novo_salario !== undefined 
+          ? Number(data.novo_salario) 
+          : null,
+        tipo_movimentacao: data.tipo_movimentacao || null,
+        funcao_nova_vaga: data.funcao_nova_vaga || null,
+        salario_nova_vaga: data.salario_nova_vaga !== null && data.salario_nova_vaga !== undefined 
+          ? Number(data.salario_nova_vaga) 
+          : null,
+        motivo_saida: data.motivo_saida || null,
+        observacoes: data.observacoes || null,
+      };
+
       const { data: mov, error } = await supabase
         .from('movimentacoes')
-        .insert([data as Database['public']['Tables']['movimentacoes']['Insert']])
+        .insert([insertData])
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error('Erro ao inserir movimentação:', error);
+        console.error('Dados enviados:', JSON.stringify(insertData, null, 2));
+        throw error;
+      }
       return mov;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['simulacao', simulacaoId] });
       queryClient.invalidateQueries({ queryKey: ['simulacoes'] });
     },
-    onError: () => {
-      toast.error('Erro ao adicionar movimentação');
+    onError: (error: any) => {
+      console.error('Erro detalhado ao adicionar movimentação:', error);
+      const errorMessage = error?.message || 'Erro ao adicionar movimentação';
+      const errorDetails = error?.details || '';
+      toast.error(`${errorMessage}${errorDetails ? `: ${errorDetails}` : ''}`);
     },
   });
 

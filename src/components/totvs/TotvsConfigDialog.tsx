@@ -303,7 +303,7 @@ export function TotvsConfigDialog({ open, onOpenChange }: TotvsConfigDialogProps
             {/* Código da Consulta */}
             <div className="space-y-2">
               <Label htmlFor="codigoConsulta">
-                Código da Consulta <span className="text-destructive">*</span>
+                Código da Consulta (CODSENTECA) <span className="text-destructive">*</span>
               </Label>
               <Input
                 id="codigoConsulta"
